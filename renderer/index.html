@@ -1,0 +1,420 @@
+<!--
+  Copyright 2025 Loney
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>OpenDesktopPet</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --fs: 13px;
+      --bar: 28px;
+      --theme: #5B8CFF;
+      --theme2: #5B8CFF;
+      --theme-gradient: linear-gradient(135deg, #5B8CFF, #5B8CFF);
+      --theme-light: #AFCBFF;
+      --theme-bg: #EAF2FF;
+      --theme-dark: #3a6ee8;
+      --theme-shadow: rgba(91,140,255,0.4);
+      --theme-shadow-soft: rgba(91,140,255,0.18);
+    }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    }
+
+    /* =========================================================
+       Live2D / 图片 渲染层
+    ========================================================= */
+    #live2d-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+    }
+    #live2d-layer canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      pointer-events: all;
+    }
+    #custom-pet-image {
+      display: none;
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      pointer-events: none;
+      z-index: 2;
+      transform-origin: center bottom;
+      background: transparent;
+    }
+
+    /* =========================================================
+       UI 叠加层
+    ========================================================= */
+    #ui-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ─── 聊天气泡 ─────────────────────────────────────────── */
+    #chat-bubble {
+      position: absolute;
+      padding: 14px 16px 18px;
+      border-radius: 18px;
+      background: #ffffff;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 2px solid var(--theme-light);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      color: #333;
+      font-size: var(--fs);
+      line-height: 1.6;
+      display: none;
+      word-break: break-word;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #chat-bubble::after {
+      content: "";
+      position: absolute;
+      left: -8px;
+      bottom: 22px;
+      width: 12px;
+      height: 12px;
+      background: #ffffff;
+      border-left: 2px solid var(--theme-light);
+      border-bottom: 2px solid var(--theme-light);
+      transform: rotate(45deg);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    #chat-bubble.visible {
+      display: block;
+      animation: bubbleIn 0.25s ease-out;
+    }
+    @keyframes bubbleIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .bubble-content {
+      word-break: break-word;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .bubble-content::-webkit-scrollbar { width: 3px; }
+    .bubble-content::-webkit-scrollbar-thumb { background: var(--theme-shadow); border-radius: 2px; }
+    @media (prefers-color-scheme: dark) {
+      #chat-bubble { background: #1e1e28; color: #eee; border-color: var(--theme); }
+      #chat-bubble::after { background: #1e1e28; border-left-color: var(--theme); border-bottom-color: var(--theme); }
+    }
+
+    /* 气泡编辑按钮 */
+    #bubble-edit-btn {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--theme);
+      border: none;
+      cursor: pointer;
+      display: none;
+      z-index: 12;
+      opacity: 0.7;
+    }
+    #chat-bubble.visible #bubble-edit-btn { display: block; }
+    #chat-bubble.edit-mode #bubble-edit-btn { display: none; }
+
+    /* 气泡编辑模式 */
+    #chat-bubble.edit-mode {
+      display: block !important;
+      pointer-events: all;
+      cursor: move;
+      outline: 2px dashed var(--theme);
+      outline-offset: 2px;
+      overflow: visible;
+      user-select: none;
+    }
+    #chat-bubble.edit-mode::before {
+      content: '拖动移动 · 右下角缩放';
+      position: absolute;
+      top: -22px;
+      left: 0;
+      font-size: calc(var(--fs) - 2px);
+      color: var(--theme);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #bubble-resize-handle {
+      display: none;
+      position: absolute;
+      bottom: -6px;
+      right: -6px;
+      width: 14px;
+      height: 14px;
+      background: var(--theme);
+      border-radius: 3px;
+      cursor: se-resize;
+      z-index: 11;
+    }
+    #chat-bubble.edit-mode #bubble-resize-handle { display: block; }
+
+    /* ─── 窗口拖动手柄 ─────────────────────────────────────── */
+    #window-drag-handle {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: #ffffff;
+      border: 2px solid var(--theme-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: move;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+      pointer-events: none;
+    }
+    #window-drag-handle.visible { opacity: 1; pointer-events: all; }
+    #window-drag-handle:hover { background: var(--theme-bg); border-color: var(--theme); }
+    #window-drag-handle svg { width: 13px; height: 13px; }
+    #window-drag-handle svg path { fill: var(--theme); }
+
+    /* ─── 窗口缩放按钮 ─────────────────────────────────────── */
+    .window-zoom-btn {
+      position: absolute;
+      left: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: #ffffff;
+      border: 2px solid var(--theme-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+      pointer-events: none;
+      color: var(--theme);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1;
+      user-select: none;
+      padding: 0;
+      font-family: inherit;
+    }
+    .window-zoom-btn.visible { opacity: 1; pointer-events: all; }
+    .window-zoom-btn:hover { background: var(--theme-bg); border-color: var(--theme); }
+    .window-zoom-btn:disabled { opacity: 0.35 !important; cursor: not-allowed; }
+    #window-zoom-in  { top: 38px; }
+    #window-zoom-out { top: 70px; }
+
+    #window-scale-label {
+      position: absolute;
+      left: 38px;
+      top: 44px;
+      font-size: 11px;
+      color: var(--theme);
+      background: #ffffff;
+      border: 1px solid var(--theme-light);
+      border-radius: 6px;
+      padding: 1px 6px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 21;
+      white-space: nowrap;
+    }
+    #window-scale-label.visible { opacity: 1; }
+
+    /* ─── 底部聊天输入区 ───────────────────────────────────── */
+    #chat-area {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 6px 10px;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      background: transparent;
+      pointer-events: all;
+      z-index: 15;
+    }
+    #chat-input {
+      flex: 1;
+      min-width: 0;
+      height: var(--bar);
+      border: 2px solid var(--theme-light);
+      border-radius: calc(var(--bar) / 2);
+      padding: 0 14px;
+      background: #ffffff;
+      color: #333;
+      font-size: calc(var(--bar) * 0.46);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #chat-input::placeholder { color: #9bb6dc; }
+    #chat-input:focus { border-color: var(--theme); }
+
+    #send-btn, #settings-btn, #screenshot-btn, #ai-toggle-btn {
+      width: var(--bar); height: var(--bar);
+      border: 2px solid var(--theme-light);
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, border-color 0.2s, transform 0.1s;
+      flex-shrink: 0;
+    }
+    #send-btn:active, #settings-btn:active, #screenshot-btn:active, #ai-toggle-btn:active {
+      transform: scale(0.94);
+    }
+    #send-btn svg, #settings-btn svg, #screenshot-btn svg, #ai-toggle-btn svg {
+      width: calc(var(--bar) * 0.57);
+      height: calc(var(--bar) * 0.57);
+    }
+    #send-btn svg path { fill: #ffffff; }
+    #settings-btn svg path, #screenshot-btn svg path { fill: var(--theme); }
+
+    #send-btn {
+      background: var(--theme-gradient);
+      border-color: var(--theme);
+    }
+    #send-btn:hover { background: var(--theme-dark); border-color: var(--theme-dark); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #settings-btn, #screenshot-btn { background: #ffffff; }
+    #settings-btn:hover, #screenshot-btn:hover { background: var(--theme-bg); border-color: var(--theme); }
+    #screenshot-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #settings-btn svg path, #screenshot-btn svg path { fill: var(--theme); }
+
+    #ai-toggle-btn { background: #ffffff; border-color: var(--theme-light); }
+    #ai-toggle-btn svg path { fill: var(--theme); }
+    #ai-toggle-btn:hover { background: var(--theme-bg); border-color: var(--theme); }
+    #ai-toggle-btn.ai-off { background: #f5f5f5; border-color: #ccc; }
+    #ai-toggle-btn.ai-off svg path { fill: #bbb; }
+    #ai-toggle-btn.ai-off:hover { background: #ececec; border-color: #aaa; }
+
+    /* ─── 自定义确认弹窗 ───────────────────────────────────── */
+    #custom-confirm-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.18);
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      pointer-events: all;
+    }
+    #custom-confirm-mask.visible { display: flex; }
+    #custom-confirm-box {
+      background: #fff; border: 2px solid var(--theme-light);
+      border-radius: 18px; box-shadow: 0 8px 32px var(--theme-shadow-soft);
+      padding: 24px 24px 18px; min-width: 220px; max-width: 280px;
+      display: flex; flex-direction: column; gap: 16px;
+      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    }
+    #custom-confirm-msg { color: #333; font-size: var(--fs); line-height: 1.6; text-align: center; }
+    #custom-confirm-btns { display: flex; gap: 10px; justify-content: center; }
+    #custom-confirm-btns button {
+      flex: 1; padding: 7px 0; border-radius: 10px;
+      border: 2px solid var(--theme-light); font-size: var(--fs);
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+      font-family: inherit;
+    }
+    #custom-confirm-ok { background: var(--theme-gradient); color: #fff; border-color: var(--theme) !important; }
+    #custom-confirm-ok:hover { opacity: 0.85; }
+    #custom-confirm-cancel { background: #fff; color: var(--theme); }
+    #custom-confirm-cancel:hover { background: var(--theme-bg); border-color: var(--theme) !important; }
+  </style>
+</head>
+<body>
+
+  <!-- 层 1：Live2D / 图片 渲染层 -->
+  <div id="live2d-layer">
+    <img id="custom-pet-image" src="" alt="">
+  </div>
+
+  <!-- 层 2：UI 叠加层 -->
+  <div id="ui-layer">
+
+    <!-- 聊天气泡 -->
+    <div id="chat-bubble">
+      <div class="bubble-content" id="bubble-content"></div>
+      <div id="bubble-resize-handle"></div>
+      <button id="bubble-edit-btn" title="调整气泡位置"></button>
+    </div>
+
+    <!-- 窗口控制：拖拽手柄、缩放按钮 -->
+    <div id="window-drag-handle" title="拖动移动窗口">
+      <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M486.4 776.533333v-213.333333H247.466667v106.666667L85.333333 512l162.133334-162.133333V512h238.933333V247.466667H349.866667L512 85.333333l162.133333 162.133334h-132.266666V512h238.933333V349.866667L938.666667 512l-162.133334 162.133333v-106.666666h-238.933333v213.333333h132.266667L512 938.666667l-162.133333-162.133334h136.533333z"/></svg>
+    </div>
+    <button id="window-zoom-in"  class="window-zoom-btn" title="放大窗口">+</button>
+    <button id="window-zoom-out" class="window-zoom-btn" title="缩小窗口">−</button>
+    <div id="window-scale-label"></div>
+
+    <!-- 底部聊天输入区 -->
+    <div id="chat-area">
+      <input type="text" id="chat-input" placeholder="说点什么吧..." autocomplete="off">
+      <button id="send-btn" title="发送"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 960A448 448 0 1 0 512 64a448 448 0 0 0 0 896z m0 64A512 512 0 1 1 512 0a512 512 0 0 1 0 1024z"/><path d="M448 422.656v217.088L621.632 531.2 448 422.656z m14.336 283.584A51.2 51.2 0 0 1 384 662.848V399.552a51.2 51.2 0 0 1 78.336-43.392l210.56 131.648a51.2 51.2 0 0 1 0 86.784l-210.56 131.648z"/></svg></button>
+      <button id="screenshot-btn" title="截屏"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M224.3 544.1h-0.5c-17.4 0-31.7 14.2-31.7 31.7v187.8c-0.1 1.2-0.2 2.3-0.2 3.5v0.5c0 6.1 1.7 11.8 4.7 16.6 5.5 9.3 15.7 15.5 27.2 15.5h0.5c1.7 0 3.4-0.1 5-0.4h186.5c17.4 0 31.7-14.2 31.7-31.7v-0.5c0-17.4-14.2-31.7-31.7-31.7H256V575.8c0-17.4-14.2-31.7-31.7-31.7zM767.9 446.9c0 17.4 14.2 31.7 31.7 31.7h0.5c17.4 0 31.7-14.2 31.7-31.7V259.8c0.2-1.4 0.3-2.8 0.3-4.3v-0.5c0-8.2-3.2-15.7-8.3-21.3-5.8-6.5-14.3-10.7-23.7-10.7h-0.5c-1.5 0-2.9 0.1-4.3 0.3H608.2c-17.4 0-31.7 14.2-31.7 31.7v0.5c0 17.4 14.2 31.7 31.7 31.7h159.7v159.7z"/><path d="M638.9 896a32.2 32.1 0 1 0 64.4 0 32.2 32.1 0 1 0-64.4 0Z"/><path d="M832.4 98.2H192.2c-70.4 0-128 57.6-128 128v574.1c0 70.4 57.6 128 128 128h350v-0.3c17.8 0 32.2-14.4 32.2-32.1 0-17.7-14.4-32.1-32.2-32.1H192c-35.2 0-64-28.8-64-64v-574c0-35.2 28.8-64 64-64h641.1c35.2 0 64 28.8 64 64v574.1c0 35.2-28.8 64-64 64h-33.2c-17.8 0-32.2 14.4-32.2 32.1 0 17.7 14.4 32.1 32.2 32.1v0.2h32.4c70.4 0 128-57.6 128-128V226.2c0.1-70.4-57.5-128-127.9-128z"/></svg></button>
+      <button id="ai-toggle-btn" title="关闭 AI 交互"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 128a384 384 0 1 0 0 768A384 384 0 0 0 512 128zm0-64a448 448 0 1 1 0 896A448 448 0 0 1 512 64zm0 192a256 256 0 0 1 181.02 437.02A256 256 0 0 1 256 512a256 256 0 0 1 256-256zm0 64a192 192 0 1 0 0 384 192 192 0 0 0 0-384zm0 64a128 128 0 1 1 0 256 128 128 0 0 1 0-256z"/><path d="M480 64h64v160h-64zM480 800h64v160h-64zM64 480h160v64H64zM800 480h160v64H800z"/></svg></button>
+      <button id="settings-btn" title="设置"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M449.194667 82.346667a128 128 0 0 1 125.610666 0l284.16 160a128 128 0 0 1 65.194667 111.530666v316.245334a128 128 0 0 1-65.194667 111.530666l-284.16 160a128 128 0 0 1-125.610666 0l-284.16-160a128 128 0 0 1-65.194667-111.530666V353.877333A128 128 0 0 1 165.034667 242.346667z m83.754666 74.410666a42.666667 42.666667 0 0 0-41.898666 0L206.933333 316.714667a42.666667 42.666667 0 0 0-21.76 37.162666v316.245334a42.666667 42.666667 0 0 0 21.76 37.162666l284.16 160a42.666667 42.666667 0 0 0 41.898667 0l284.16-160a42.666667 42.666667 0 0 0 21.76-37.162666V353.877333a42.666667 42.666667 0 0 0-21.76-37.162666zM512 341.333333a170.666667 170.666667 0 1 1 0 341.333334 170.666667 170.666667 0 0 1 0-341.333334z m0 85.333334a85.333333 85.333333 0 1 0 0 170.666666 85.333333 85.333333 0 0 0 0-170.666666z"/></svg></button>
+    </div>
+
+    <!-- 自定义确认弹窗 -->
+    <div id="custom-confirm-mask">
+      <div id="custom-confirm-box">
+        <div id="custom-confirm-msg"></div>
+        <div id="custom-confirm-btns">
+          <button id="custom-confirm-cancel">取消</button>
+          <button id="custom-confirm-ok">确定</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /ui-layer -->
+
+  <script src="../libs/live2dcubismcore.min.js"></script>
+  <script src="../libs/pixi.min.js"></script>
+  <script src="../libs/cubism4.min.js"></script>
+  <script src="./pet-controller.js"></script>
+  <script src="./chat.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+OpenDesktopPet
+Copyright 2025 Loney
+
+The original source code of this project is licensed under the Apache License, Version 2.0.
+
+==========================================================================
+Third-Party Notices
+==========================================================================
+
+This product includes the following third-party libraries that are NOT
+covered by the Apache License 2.0 and are subject to their own respective
+licenses:
+
+--------------------------------------------------------------------------
+Live2D Cubism Core (libs/live2dcubismcore.min.js)
+--------------------------------------------------------------------------
+Copyright Live2D Inc.
+Licensed under the Live2D Proprietary Software License Agreement.
+https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html
+
+This file is NOT open source. Use of Live2D Cubism Core is subject to the
+Live2D Proprietary Software License Agreement. Users must comply with the
+terms of that agreement independently of this project's Apache 2.0 license.
+
+Free use is permitted for individuals and small businesses with annual
+revenue under 10 million JPY. Commercial use above this threshold requires
+a separate commercial license from Live2D Inc.
+
+--------------------------------------------------------------------------
+Cubism SDK for Web (libs/cubism4.min.js)
+--------------------------------------------------------------------------
+Copyright Live2D Inc.
+Licensed under the Live2D Open Software License.
+https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html
+
+--------------------------------------------------------------------------
+PixiJS (libs/pixi.min.js)
+--------------------------------------------------------------------------
+Copyright (c) 2013-present, PixiJS Contributors
+Licensed under the MIT License.
+https://opensource.org/licenses/MIT
+
+--------------------------------------------------------------------------
+sharp (@img/sharp-win32-x64, devDependency)
+--------------------------------------------------------------------------
+Copyright (c) Lovell Fuller and contributors
+Licensed under Apache-2.0 AND LGPL-3.0-or-later.
+https://github.com/lovell/sharp
+
+Note: sharp is used only as a build-time devDependency and is NOT included
+in the distributed application.

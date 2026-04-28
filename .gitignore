@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+config.json
+memory.json
+
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.claude/

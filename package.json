@@ -1,0 +1,101 @@
+{
+  "name": "open-desktop-pet",
+  "version": "1.0.0",
+  "description": "OpenDesktopPet - AI Desktop Pet",
+  "license": "Apache-2.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "chcp 65001 && node start.js",
+    "start:mac": "node start.js",
+    "build": "electron-builder --win nsis",
+    "build:portable": "electron-builder --win portable",
+    "build:mac": "electron-builder --mac dmg",
+    "build:mac-arm": "electron-builder --mac dmg --arm64",
+    "copy-assets": "node scripts/copy-assets.js",
+    "make-ico": "node scripts/make-ico.js"
+  },
+  "dependencies": {
+    "pinia": "^3.0.4",
+    "uuid": "^11.1.0",
+    "vue-router": "^4.6.4",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
+  },
+  "build": {
+    "appId": "com.opendesktoppet.app",
+    "productName": "OpenDesktopPet",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "start.js",
+      "config.example.json",
+      "memory.example.json",
+      "build/icon.ico",
+      "icon/logo.png",
+      "renderer/**/*",
+      "services/**/*",
+      "libs/**/*",
+      "assets/**/*"
+    ],
+    "asarUnpack": [
+      "assets/**/*"
+    ],
+    "win": {
+      "requestedExecutionLevel": "requireAdministrator",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "icon/logo.png",
+      "category": "public.app-category.entertainment",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "OpenDesktopPet-${version}-${arch}.dmg",
+      "title": "OpenDesktopPet ${version}"
+    },
+    "portable": {
+      "artifactName": "OpenDesktopPet-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenDesktopPet",
+      "installerLanguages": [
+        "en_US"
+      ],
+      "language": "1033",
+      "installerHeaderIcon": "build/icon.ico",
+      "include": "build/installer.nsh",
+      "artifactName": "OpenDesktopPet-Setup-${version}.exe"
+    }
+  }
+}

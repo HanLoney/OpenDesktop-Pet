@@ -1,0 +1,266 @@
+<!--
+  Copyright 2025 Loney
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>调试 - 提示词查看器</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html {
+      width: 100%; height: 100%;
+      overflow: hidden;
+    }
+    body {
+      width: 100%; height: 100%;
+      background: #0f1117;
+      color: #d4d4d4;
+      font-family: 'Consolas', 'Cascadia Code', 'Microsoft YaHei', monospace;
+      font-size: 13px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3e;
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+    }
+    #toolbar span {
+      color: #7a8aa8;
+      font-size: 12px;
+      flex: 1;
+      -webkit-app-region: drag;
+    }
+    .tb-btn {
+      padding: 3px 10px;
+      border: 1px solid #3a3d55;
+      border-radius: 5px;
+      background: #252838;
+      color: #9bb6dc;
+      font-size: 12px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      transition: background 0.15s;
+    }
+    .tb-btn:hover { background: #2e3250; color: #fff; }
+
+    #log-container {
+      flex: 1;
+      min-height: 0;
+      overflow-y: scroll;
+      padding: 10px 12px;
+    }
+    .round-block {
+      margin-bottom: 14px;
+    }
+    #log-container::-webkit-scrollbar { width: 5px; }
+    #log-container::-webkit-scrollbar-thumb { background: #2e3250; border-radius: 3px; }
+
+    .round-block {
+      border: 1px solid #2a2d3e;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .round-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: #1a1d27;
+      font-size: 11px;
+      color: #7a8aa8;
+      cursor: pointer;
+      user-select: none;
+    }
+    .round-header:hover { background: #20233a; }
+    .round-header .round-title { color: #5B8CFF; font-weight: bold; }
+    .round-header .round-time { color: #555; }
+    .round-header .copy-btn {
+      padding: 1px 8px;
+      border: 1px solid #3a3d55;
+      border-radius: 4px;
+      background: #252838;
+      color: #9bb6dc;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .round-header .copy-btn:hover { background: #2e3250; color: #fff; }
+
+    .round-body {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .msg-block {
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .msg-role {
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+    .msg-role.system  { background: #1e3a2a; color: #4ade80; }
+    .msg-role.user    { background: #1e2e3a; color: #60a5fa; }
+    .msg-role.assistant { background: #2a1e3a; color: #c084fc; }
+
+    .msg-content {
+      padding: 8px 10px;
+      background: #161822;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.65;
+      font-size: 12.5px;
+      color: #cdd6f4;
+      border: 1px solid #2a2d3e;
+      border-top: none;
+    }
+
+    /* 图片消息特殊展示 */
+    .msg-content.has-image {
+      color: #7a8aa8;
+      font-style: italic;
+    }
+
+    #empty-hint {
+      color: #3a3d55;
+      text-align: center;
+      margin-top: 40px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <span>提示词调试器</span>
+    <button class="tb-btn" id="clear-btn">清空</button>
+    <button class="tb-btn" id="copy-last-btn">复制最新</button>
+  </div>
+  <div id="log-container">
+    <div id="empty-hint">等待对话…</div>
+  </div>
+
+  <script>
+    const logContainer = document.getElementById('log-container');
+    const emptyHint = document.getElementById('empty-hint');
+    let rounds = [];
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      return d.toLocaleTimeString('zh-CN', { hour12: false });
+    }
+
+    function renderContent(content) {
+      // 图文混合消息（数组）
+      if (Array.isArray(content)) {
+        const texts = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+        const hasImg = content.some(c => c.type === 'image_url');
+        return { text: (hasImg ? '[图片]\n' : '') + texts, hasImage: hasImg };
+      }
+      return { text: content || '', hasImage: false };
+    }
+
+    function addRound(data) {
+      rounds.push(data);
+      if (emptyHint) emptyHint.style.display = 'none';
+
+      const block = document.createElement('div');
+      block.className = 'round-block';
+      block.dataset.idx = rounds.length - 1;
+
+      const header = document.createElement('div');
+      header.className = 'round-header';
+      header.innerHTML = `
+        <span class="round-title">#${rounds.length} ${data.model || ''}</span>
+        <span class="round-time">${formatTime(data.ts)}</span>
+        <button class="copy-btn">复制</button>
+      `;
+
+      const body = document.createElement('div');
+      body.className = 'round-body';
+
+      for (const msg of data.messages) {
+        const { text, hasImage } = renderContent(msg.content);
+        const msgBlock = document.createElement('div');
+        msgBlock.className = 'msg-block';
+
+        const roleEl = document.createElement('div');
+        roleEl.className = `msg-role ${msg.role}`;
+        roleEl.textContent = msg.role.toUpperCase();
+
+        const contentEl = document.createElement('div');
+        contentEl.className = 'msg-content' + (hasImage ? ' has-image' : '');
+        contentEl.textContent = text;
+
+        msgBlock.appendChild(roleEl);
+        msgBlock.appendChild(contentEl);
+        body.appendChild(msgBlock);
+      }
+
+      header.querySelector('.copy-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyRound(data);
+      });
+
+      // 点击 header 折叠/展开
+      header.addEventListener('click', () => {
+        body.style.display = body.style.display === 'none' ? '' : 'none';
+      });
+
+      block.appendChild(header);
+      block.appendChild(body);
+      logContainer.appendChild(block);
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function copyRound(data) {
+      const lines = data.messages.map(m => {
+        const { text } = renderContent(m.content);
+        return `[${m.role.toUpperCase()}]\n${text}`;
+      });
+      navigator.clipboard.writeText(lines.join('\n\n---\n\n')).catch(() => {});
+    }
+
+    document.getElementById('clear-btn').addEventListener('click', () => {
+      rounds = [];
+      logContainer.innerHTML = '';
+      logContainer.appendChild(emptyHint);
+      emptyHint.style.display = '';
+    });
+
+    document.getElementById('copy-last-btn').addEventListener('click', () => {
+      if (rounds.length === 0) return;
+      copyRound(rounds[rounds.length - 1]);
+    });
+
+    // 接收主进程推送的提示词数据
+    window.electronAPI.onDebugPrompt((data) => {
+      addRound(data);
+    });
+  </script>
+</body>
+</html>

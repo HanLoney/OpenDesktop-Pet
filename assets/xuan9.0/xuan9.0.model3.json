@@ -1,0 +1,83 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "xuan9.0.moc3",
+		"Textures": [
+			"xuan9.0.4096/texture_00.png"
+		],
+		"Physics": "xuan9.0.physics3.json",
+		"DisplayInfo": "xuan9.0.cdi3.json",
+		"Expressions": [
+			{
+				"Name": "head pat",
+				"File": "head pat.exp3.json"
+			},
+			{
+				"Name": "heilian",
+				"File": "heilian.exp3.json"
+			},
+			{
+				"Name": "kuku",
+				"File": "kuku.exp3.json"
+			},
+			{
+				"Name": "lianhong",
+				"File": "lianhong.exp3.json"
+			},
+			{
+				"Name": "miyan",
+				"File": "miyan.exp3.json"
+			},
+			{
+				"Name": "OO",
+				"File": "OO.exp3.json"
+			},
+			{
+				"Name": "SAJIAO",
+				"File": "SAJIAO.exp3.json"
+			}
+		],
+        "Motions": {
+            "TapBody": [
+                {
+                    "File": "head pat.motion3.json"
+                },
+                {
+                    "File": "cry.motion3.json"
+                },
+                {
+                    "File": "roll.motion3.json"
+                },
+                {
+                    "File": "yun.motion3.json"
+                },
+                {
+                    "File": "shyin.motion3.json"
+                },
+                {
+                    "File": "shyout.motion3.json"
+                },
+                {
+                    "File": "shystay.motion3.json"
+                }
+            ],
+            "Idle": []
+        }
+
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		}
+	]
+}
