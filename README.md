@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon/logo.png" alt="OpenDesktopPet Logo" width="200">
+  <img src="icon/MainLogo.png" alt="OpenDesktopPet Logo" width="200">
 </p>
 
 <h1 align="center">OpenDesktopPet</h1>
