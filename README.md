@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="icon/MainLogo.png" alt="OpenDesktopPet Logo" width="200">
+  <img src="icon/MainLogo.png" alt="OpenDesktopPet Logo" width="800">
+</p>
+
+<p align="center">
+  <img src="icon/UI2.png" alt="OpenDesktopPet UI" width="600">
 </p>
 
 <h1 align="center">OpenDesktopPet</h1>
