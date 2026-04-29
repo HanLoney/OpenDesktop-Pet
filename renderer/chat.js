@@ -649,6 +649,12 @@ window.electronAPI.onConfigUpdated((config) => {
   applyBarSize(ui.bar_size || 28);
   applyTheme(ui.theme_color || '#5B8CFF',
     ui.theme_color_mode === 'gradient' ? (ui.theme_color2 || ui.theme_color || '#5B8CFF') : null);
+  // 角色图片同步
+  if (ui.custom_image) {
+    if (typeof window.setCustomImage === 'function') window.setCustomImage(ui.custom_image);
+  } else {
+    if (typeof window.clearCustomImage === 'function') window.clearCustomImage();
+  }
   // 摄像头开关同步
   syncCameraStream(config.camera?.enabled, config.camera?.device_id);
 });
@@ -721,6 +727,19 @@ window.electronAPI.onSetCustomImage((url) => {
 });
 window.electronAPI.onClearCustomImage(() => {
   if (typeof window.clearCustomImage === 'function') window.clearCustomImage();
+});
+
+// 角色切换通知：更新图片、清空气泡
+window.electronAPI.onProfileSwitched((profile) => {
+  // 切换角色图片
+  if (profile.custom_image) {
+    if (typeof window.setCustomImage === 'function') window.setCustomImage(profile.custom_image);
+  } else {
+    if (typeof window.clearCustomImage === 'function') window.clearCustomImage();
+  }
+  // 清空聊天气泡
+  bubbleContent.textContent = '';
+  chatBubble.classList.remove('visible');
 });
 
 document.getElementById('bubble-edit-btn')?.addEventListener('click', (e) => {

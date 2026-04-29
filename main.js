@@ -81,6 +81,153 @@ function getConfigPath() {
   return path.join(getDataDir(), 'config.json');
 }
 
+// ========================
+//  角色配置（Profile）管理
+// ========================
+function getProfilesDir() {
+  return path.join(getDataDir(), 'profiles');
+}
+
+function getProfileDir(id) {
+  return path.join(getProfilesDir(), id);
+}
+
+function loadProfile(id) {
+  try {
+    const p = path.join(getProfileDir(id), 'profile.json');
+    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch (_e) {
+    return { name: id, system_prompt: '', proactive_system_prompt: '', decision_prompt: '', custom_image: '' };
+  }
+}
+
+function saveProfile(id, data) {
+  const dir = getProfileDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'profile.json'), JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function listProfiles() {
+  const dir = getProfilesDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => {
+      const profile = loadProfile(d.name);
+      return { id: d.name, name: profile.name || d.name };
+    });
+}
+
+function createProfile(data) {
+  // 生成 id：用时间戳保证唯一
+  const id = 'profile-' + Date.now();
+  const profile = {
+    name: data.name || '新角色',
+    system_prompt: data.system_prompt || '',
+    proactive_system_prompt: data.proactive_system_prompt || '',
+    decision_prompt: data.decision_prompt || '',
+    custom_image: data.custom_image || '',
+  };
+  const dir = getProfileDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'profile.json'), JSON.stringify(profile, null, 2), 'utf-8');
+  // 创建空记忆文件
+  fs.writeFileSync(path.join(dir, 'memory.json'), JSON.stringify({
+    summary: '', facts: [], pendingHistory: [], lastSummaryAt: 0, totalRounds: 0
+  }, null, 2), 'utf-8');
+  return { id, name: profile.name };
+}
+
+function deleteProfile(id) {
+  const config = loadConfig();
+  if ((config.activeProfile || 'default') === id) {
+    return { ok: false, error: '不能删除当前激活的角色' };
+  }
+  if (id === 'default') {
+    return { ok: false, error: '不能删除默认角色' };
+  }
+  const dir = getProfileDir(id);
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return { ok: true };
+}
+
+function switchProfile(id) {
+  const dir = getProfileDir(id);
+  if (!fs.existsSync(dir)) {
+    return { ok: false, error: '角色不存在' };
+  }
+  // 保存当前记忆
+  memoryService.save();
+  // 更新配置中的 activeProfile
+  const config = loadConfig();
+  config.activeProfile = id;
+  saveConfigFile(config);
+  // 切换记忆目录
+  memoryService.setDataDir(dir);
+  memoryService.reload();
+  // 加载新 profile 数据
+  const profile = loadProfile(id);
+  // 通知渲染进程
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('profile-switched', profile);
+  }
+  return { ok: true, profile };
+}
+
+/**
+ * 从当前激活的 profile 读取提示词
+ */
+function getActivePrompts() {
+  const config = loadConfig();
+  const profileId = config.activeProfile || 'default';
+  const profile = loadProfile(profileId);
+  return {
+    system_prompt: profile.system_prompt || config.llm?.system_prompt || '',
+    proactive_system_prompt: profile.proactive_system_prompt || config.proactive?.system_prompt || '',
+    decision_prompt: profile.decision_prompt || config.proactive?.decision_prompt || '',
+  };
+}
+
+/**
+ * 首次启动迁移：将现有配置迁移到 profiles/default
+ */
+function ensureProfiles() {
+  const profilesDir = getProfilesDir();
+  const defaultDir = path.join(profilesDir, 'default');
+  if (fs.existsSync(defaultDir)) return; // 已迁移过
+
+  fs.mkdirSync(defaultDir, { recursive: true });
+  const config = loadConfig();
+
+  // 提取提示词到 profile
+  const profile = {
+    name: '默认角色',
+    system_prompt: config.llm?.system_prompt || '',
+    proactive_system_prompt: config.proactive?.system_prompt || '',
+    decision_prompt: config.proactive?.decision_prompt || '',
+    custom_image: config.ui?.custom_image || '',
+  };
+  fs.writeFileSync(path.join(defaultDir, 'profile.json'), JSON.stringify(profile, null, 2), 'utf-8');
+
+  // 复制记忆文件
+  const memSrc = path.join(getDataDir(), 'memory.json');
+  const memDst = path.join(defaultDir, 'memory.json');
+  if (fs.existsSync(memSrc)) {
+    fs.copyFileSync(memSrc, memDst);
+  } else {
+    fs.writeFileSync(memDst, JSON.stringify({
+      summary: '', facts: [], pendingHistory: [], lastSummaryAt: 0, totalRounds: 0
+    }, null, 2), 'utf-8');
+  }
+
+  // 写入 activeProfile
+  config.activeProfile = 'default';
+  saveConfigFile(config);
+  console.log('[Profile] 首次迁移完成，已创建默认角色配置');
+}
+
 /** 首次启动时，把项目内示例配置复制到 userData/config.json */
 function ensureConfigFile() {
   const dest = getConfigPath();
@@ -124,8 +271,11 @@ function saveConfigFile(config) {
 // ========================
 app.whenReady().then(() => {
   ensureConfigFile();
-  memoryService.setDataDir(getDataDir());
+  ensureProfiles();
   const config = loadConfig();
+  const profileId = config.activeProfile || 'default';
+  const profileDir = getProfileDir(profileId);
+  memoryService.setDataDir(profileDir);
   memoryService.setMemoryConfig(config.memory?.context_rounds ?? 10);
   createWindow();
   createTray();
@@ -327,6 +477,9 @@ ipcMain.handle('get-config', () => {
 
 ipcMain.handle('save-config', (_event, config) => {
   try {
+    // 保留 activeProfile 字段
+    const existing = loadConfig();
+    if (existing.activeProfile) config.activeProfile = existing.activeProfile;
     saveConfigFile(config);
     // 同步记忆参数
     memoryService.setMemoryConfig(config.memory?.context_rounds ?? 10);
@@ -338,6 +491,50 @@ ipcMain.handle('save-config', (_event, config) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+// ========================
+//  IPC: 角色配置（Profile）
+// ========================
+
+ipcMain.handle('profile-list', () => listProfiles());
+
+ipcMain.handle('profile-get', (_event, id) => loadProfile(id));
+
+ipcMain.handle('profile-get-active', () => {
+  const config = loadConfig();
+  const id = config.activeProfile || 'default';
+  return { id, profile: loadProfile(id) };
+});
+
+ipcMain.handle('profile-save', (_event, id, data) => {
+  try {
+    saveProfile(id, data);
+    // 如果保存的是当前激活的 profile，通知渲染进程
+    const config = loadConfig();
+    if ((config.activeProfile || 'default') === id && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('profile-switched', data);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('profile-create', (_event, data) => {
+  try {
+    return { ok: true, ...createProfile(data) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('profile-delete', (_event, id) => {
+  return deleteProfile(id);
+});
+
+ipcMain.handle('profile-switch', (_event, id) => {
+  return switchProfile(id);
 });
 
 // ========================
@@ -405,10 +602,12 @@ async function handleChat(event, message, imageBase64, extraImages) {
     }
   }
 
-  // 调用 LLM
+  // 调用 LLM（使用 active profile 的系统提示词）
+  const prompts = getActivePrompts();
+  const llmConfigWithProfile = { ...config.llm, system_prompt: prompts.system_prompt };
   chatStream(
     message,
-    config.llm || {},
+    llmConfigWithProfile,
     // onToken
     (token) => {
       if (!sender.isDestroyed()) {
@@ -580,9 +779,10 @@ async function doProactiveInteraction() {
       ? `距上次主动交互已过 ${minutesSinceLast} 分钟。`
       : '这是今天第一次主动检测。';
 
-    const rawDecisionPrompt = (config.proactive?.decision_prompt)
-      ? config.proactive.decision_prompt
-      : '请观察用户当前屏幕状态。${sinceStr}\n判断：现在是否适合桌宠主动发起互动？\n如果用户在专注工作/开会/看视频/游戏，可以不打扰；如果用户在闲逛/发呆/做轻松任务，适合互动。';
+    const activePrompts = getActivePrompts();
+    const rawDecisionPrompt = activePrompts.decision_prompt
+      || config.proactive?.decision_prompt
+      || '请观察用户当前屏幕状态。${sinceStr}\n判断：现在是否适合桌宠主动发起互动？\n如果用户在专注工作/开会/看视频/游戏，可以不打扰；如果用户在闲逛/发呆/做轻松任务，适合互动。';
     const decisionPromptText = rawDecisionPrompt.replace('${sinceStr}', sinceStr);
 
     const decisionMessages = [
@@ -668,9 +868,10 @@ async function doProactiveInteraction() {
     }
   }
 
-  const proactivePrompt = (config.proactive && config.proactive.system_prompt)
-    ? config.proactive.system_prompt
-    : DEFAULT_PROACTIVE_PROMPT;
+  const activePrompts = getActivePrompts();
+  const proactivePrompt = activePrompts.proactive_system_prompt
+    || (config.proactive && config.proactive.system_prompt)
+    || DEFAULT_PROACTIVE_PROMPT;
   const llmConfig = { ...config.llm, system_prompt: proactivePrompt };
 
   chatStream(
@@ -838,8 +1039,16 @@ ipcMain.on('open-settings-window', () => {
   openSettingsWindow();
 });
 
-// 设置窗口保存配置后，通知主窗口刷新 UI
+// 设置窗口保存配置后，通知主窗口刷新 UI，同时保存提示词到当前 profile
 ipcMain.on('notify-config-saved', (_event, config) => {
+  const activeId = config.activeProfile || loadConfig().activeProfile || 'default';
+  const profile = loadProfile(activeId);
+  profile.system_prompt = config.llm?.system_prompt || '';
+  profile.proactive_system_prompt = config.proactive?.system_prompt || '';
+  profile.decision_prompt = config.proactive?.decision_prompt || '';
+  profile.custom_image = config.ui?.custom_image || '';
+  saveProfile(activeId, profile);
+
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('config-updated', config);
   }
@@ -901,11 +1110,11 @@ ipcMain.handle('memory-import', async () => {
 // 提示词导出
 ipcMain.handle('prompt-export', async () => {
   try {
-    const cfg = loadConfig();
+    const activePrompts = getActivePrompts();
     const prompts = {
-      llm_system_prompt: cfg.llm?.system_prompt || '',
-      proactive_decision_prompt: cfg.proactive?.decision_prompt || '',
-      proactive_system_prompt: cfg.proactive?.system_prompt || '',
+      llm_system_prompt: activePrompts.system_prompt || '',
+      proactive_decision_prompt: activePrompts.decision_prompt || '',
+      proactive_system_prompt: activePrompts.proactive_system_prompt || '',
     };
     const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
       title: '导出提示词配置',

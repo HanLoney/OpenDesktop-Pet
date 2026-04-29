@@ -53,10 +53,20 @@ let MEMORY_PATH = path.join(__dirname, '..', 'memory.json');
 
 /**
  * 由 main.js 在 app ready 后调用，将数据文件指向 userData 目录
- * @param {string} dataDir  app.getPath('userData')
+ * @param {string} dataDir  app.getPath('userData') 或 profile 目录
  */
 function setDataDir(dataDir) {
   MEMORY_PATH = path.join(dataDir, 'memory.json');
+  _loaded = false; // 强制下次 load() 重新读取
+}
+
+/**
+ * 强制重新从磁盘加载记忆（切换 profile 后调用）
+ */
+function reload() {
+  _loaded = false;
+  mem = { summary: '', facts: [], pendingHistory: [], lastSummaryAt: 0, totalRounds: 0 };
+  load();
 }
 
 /** 内存中的记忆状态 */
@@ -341,6 +351,8 @@ function clearMemory() {
 
 module.exports = {
   load,
+  save,
+  reload,
   setDataDir,
   getContextMessages,
   appendRound,

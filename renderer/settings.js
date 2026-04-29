@@ -23,6 +23,7 @@ function showConfirm(msg) {
   return new Promise((resolve) => {
     const mask = document.getElementById('custom-confirm-mask');
     const msgEl = document.getElementById('custom-confirm-msg');
+    const inputEl = document.getElementById('custom-confirm-input');
     const oldOk = document.getElementById('custom-confirm-ok');
     const oldCancel = document.getElementById('custom-confirm-cancel');
     const okBtn = oldOk.cloneNode(true);
@@ -30,6 +31,7 @@ function showConfirm(msg) {
     oldOk.parentNode.replaceChild(okBtn, oldOk);
     oldCancel.parentNode.replaceChild(cancelBtn, oldCancel);
     msgEl.textContent = msg;
+    if (inputEl) { inputEl.style.display = 'none'; inputEl.value = ''; }
     mask.classList.add('visible');
     function cleanup(result) {
       mask.classList.remove('visible');
@@ -39,6 +41,42 @@ function showConfirm(msg) {
     }
     function onOk() { cleanup(true); }
     function onCancel() { cleanup(false); }
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+/**
+ * 带输入框的确认弹窗，返回输入的文字或 null
+ */
+function showPrompt(msg, placeholder) {
+  return new Promise((resolve) => {
+    const mask = document.getElementById('custom-confirm-mask');
+    const msgEl = document.getElementById('custom-confirm-msg');
+    const inputEl = document.getElementById('custom-confirm-input');
+    const oldOk = document.getElementById('custom-confirm-ok');
+    const oldCancel = document.getElementById('custom-confirm-cancel');
+    const okBtn = oldOk.cloneNode(true);
+    const cancelBtn = oldCancel.cloneNode(true);
+    oldOk.parentNode.replaceChild(okBtn, oldOk);
+    oldCancel.parentNode.replaceChild(cancelBtn, oldCancel);
+    msgEl.textContent = msg;
+    if (inputEl) {
+      inputEl.style.display = 'block';
+      inputEl.value = '';
+      inputEl.placeholder = placeholder || '';
+      setTimeout(() => inputEl.focus(), 50);
+    }
+    mask.classList.add('visible');
+    function cleanup(result) {
+      mask.classList.remove('visible');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      if (inputEl) inputEl.style.display = 'none';
+      resolve(result);
+    }
+    function onOk() { cleanup(inputEl ? inputEl.value.trim() : ''); }
+    function onCancel() { cleanup(null); }
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
   });
@@ -339,6 +377,224 @@ function initCameraSection(config) {
 }
 
 // ========================
+//  角色配置（Profile）管理
+// ========================
+let _currentProfileId = 'default';
+
+function showProfileStatus(msg, isError) {
+  const el = document.getElementById('profile-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'rgba(255,120,120,0.8)' : '#3aa76d';
+  setTimeout(() => { el.textContent = ''; el.style.color = ''; }, 2500);
+}
+
+async function loadProfileList() {
+  const select = document.getElementById('cfg-profile-select');
+  if (!select) return;
+  const profiles = await window.electronAPI.profileList();
+  const { id: activeId } = await window.electronAPI.profileGetActive();
+  _currentProfileId = activeId;
+  select.innerHTML = '';
+  profiles.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    if (p.id === activeId) opt.selected = true;
+    select.appendChild(opt);
+  });
+  syncDeleteBtnLabel();
+}
+
+async function loadProfileIntoForm(profileId) {
+  const profile = await window.electronAPI.profileGet(profileId);
+  document.getElementById('cfg-llm-system-prompt').value = profile.system_prompt || '';
+  document.getElementById('cfg-proactive-decision-prompt').value = profile.decision_prompt || '';
+  document.getElementById('cfg-proactive-system-prompt').value = profile.proactive_system_prompt || '';
+  updateCustomImagePreview(profile.custom_image || '');
+}
+
+function syncDeleteBtnLabel() {
+  const select = document.getElementById('cfg-profile-select');
+  const btn = document.getElementById('profile-delete-btn');
+  if (!select || !btn) return;
+  if (select.value === 'default') {
+    btn.textContent = '恢复默认';
+    btn.style.borderColor = 'var(--theme-light)';
+    btn.style.color = 'var(--theme)';
+  } else {
+    btn.textContent = '删除角色';
+    btn.style.borderColor = '#ffb3b3';
+    btn.style.color = '#e05555';
+  }
+}
+
+document.getElementById('cfg-profile-select').addEventListener('change', async () => {
+  const select = document.getElementById('cfg-profile-select');
+  const id = select.value;
+  syncDeleteBtnLabel();
+  if (!id || id === _currentProfileId) return;
+  const result = await window.electronAPI.profileSwitch(id);
+  if (result.ok) {
+    _currentProfileId = id;
+    await loadProfileIntoForm(id);
+    loadMemoryInfo();
+    showProfileStatus('已切换角色');
+  } else {
+    // 切换失败，恢复选择
+    select.value = _currentProfileId;
+    showProfileStatus(result.error || '切换失败', true);
+  }
+});
+
+document.getElementById('profile-new-btn').addEventListener('click', () => {
+  // 清空弹窗表单
+  document.getElementById('profile-create-name').value = '';
+  document.getElementById('profile-create-system-prompt').value = '';
+  document.getElementById('profile-create-decision-prompt').value = '';
+  document.getElementById('profile-create-proactive-prompt').value = '';
+  _profileCreateImageUrl = '';
+  document.getElementById('profile-create-image-preview-wrap').style.display = 'none';
+  document.getElementById('profile-create-image-preview').src = '';
+  document.getElementById('profile-create-image-clear-btn').style.display = 'none';
+  document.getElementById('profile-create-status').textContent = '';
+  // 显示弹窗
+  document.getElementById('profile-create-mask').classList.add('visible');
+});
+
+// ========================
+//  新建角��弹窗逻辑
+// ========================
+let _profileCreateImageUrl = '';
+
+document.getElementById('profile-create-close').addEventListener('click', () => {
+  document.getElementById('profile-create-mask').classList.remove('visible');
+});
+
+document.getElementById('profile-create-mask').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    document.getElementById('profile-create-mask').classList.remove('visible');
+  }
+});
+
+document.getElementById('profile-create-import-btn').addEventListener('click', async () => {
+  const result = await window.electronAPI.promptImport();
+  if (!result.ok) return;
+  const d = result.data || {};
+  if (d.llm_system_prompt !== undefined)
+    document.getElementById('profile-create-system-prompt').value = d.llm_system_prompt;
+  if (d.proactive_decision_prompt !== undefined)
+    document.getElementById('profile-create-decision-prompt').value = d.proactive_decision_prompt;
+  if (d.proactive_system_prompt !== undefined)
+    document.getElementById('profile-create-proactive-prompt').value = d.proactive_system_prompt;
+  showProfileCreateStatus('提示词已导入');
+});
+
+document.getElementById('profile-create-image-btn').addEventListener('click', async () => {
+  const result = await window.electronAPI.chooseCustomImage();
+  if (!result.ok) return;
+  _profileCreateImageUrl = result.url;
+  document.getElementById('profile-create-image-preview').src = result.url;
+  document.getElementById('profile-create-image-preview-wrap').style.display = 'block';
+  document.getElementById('profile-create-image-clear-btn').style.display = '';
+});
+
+document.getElementById('profile-create-image-clear-btn').addEventListener('click', () => {
+  _profileCreateImageUrl = '';
+  document.getElementById('profile-create-image-preview-wrap').style.display = 'none';
+  document.getElementById('profile-create-image-preview').src = '';
+  document.getElementById('profile-create-image-clear-btn').style.display = 'none';
+});
+
+function showProfileCreateStatus(msg, isError) {
+  const el = document.getElementById('profile-create-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'rgba(255,120,120,0.8)' : '#3aa76d';
+  setTimeout(() => { el.textContent = ''; el.style.color = ''; }, 2500);
+}
+
+document.getElementById('profile-create-save-btn').addEventListener('click', async () => {
+  const name = document.getElementById('profile-create-name').value.trim();
+  if (!name) {
+    showProfileCreateStatus('请输入角色名称', true);
+    return;
+  }
+  const data = {
+    name,
+    system_prompt: document.getElementById('profile-create-system-prompt').value.trim(),
+    decision_prompt: document.getElementById('profile-create-decision-prompt').value.trim(),
+    proactive_system_prompt: document.getElementById('profile-create-proactive-prompt').value.trim(),
+    custom_image: _profileCreateImageUrl || '',
+  };
+  const result = await window.electronAPI.profileCreate(data);
+  if (result.ok) {
+    await loadProfileList();
+    const select = document.getElementById('cfg-profile-select');
+    select.value = result.id;
+    // 自动切换到新创建的角色，加载完整配置
+    const switchResult = await window.electronAPI.profileSwitch(result.id);
+    if (switchResult.ok) {
+      _currentProfileId = result.id;
+      await loadProfileIntoForm(result.id);
+      loadMemoryInfo();
+      syncDeleteBtnLabel();
+    }
+    document.getElementById('profile-create-mask').classList.remove('visible');
+    showProfileStatus(`角色「${name}」已创建`);
+  } else {
+    showProfileCreateStatus(result.error || '创建失败', true);
+  }
+});
+
+document.getElementById('profile-delete-btn').addEventListener('click', async () => {
+  const select = document.getElementById('cfg-profile-select');
+  const id = select.value;
+  if (!id) return;
+
+  // 默认角色 → 恢复默认
+  if (id === 'default') {
+    const confirmed = await showConfirm('确定要恢复默认角色的初始设置吗？提示词和图片将被重置。');
+    if (!confirmed) return;
+    const resetData = {
+      name: '默认角色',
+      system_prompt: '你是小玄，一个可爱的桌宠。用口语化的方式简短回复，2-3句话以内。',
+      decision_prompt: '请观察用户当前屏幕状态。${sinceStr}\n判断：现在是否适合桌宠主动打招呼？\n规则：\n1. 距上次互动不足3分钟，除非用户明显空闲，否则返回 false\n2. 用户在专注编码/开会/看视频/打游戏，返回 false\n3. 用户在闲逛/发呆/看图/聊天等轻松状态，返回 true\n4. 屏幕无明显内容变化（可能挂机），返回 false',
+      proactive_system_prompt: '你是小玄，一个桌面宠物。你刚刚偷看了用户的屏幕，请根据屏幕内容像朋友一样主动发起一句简短互动（1-2句话）。语气可爱、自然、口语化。不要说\'我看到你的屏幕\'这种话，直接评论内容或关心用户。',
+      custom_image: '',
+    };
+    await window.electronAPI.profileSave('default', resetData);
+    await loadProfileIntoForm('default');
+    showProfileStatus('默认角色已恢复初始设置');
+    return;
+  }
+
+  // 非默认角色 → 删除
+  const name = select.options[select.selectedIndex].textContent;
+  const confirmed = await showConfirm(`确定要删除角色「${name}」吗？此操作不可恢复。`);
+  if (!confirmed) return;
+  // 如果要删除的是当前激活角色，先切回默认角色
+  if (id === _currentProfileId) {
+    const switchResult = await window.electronAPI.profileSwitch('default');
+    if (!switchResult.ok) {
+      showProfileStatus('切换默认角色失败', true);
+      return;
+    }
+    _currentProfileId = 'default';
+    await loadProfileIntoForm('default');
+    loadMemoryInfo();
+  }
+  const result = await window.electronAPI.profileDelete(id);
+  if (result.ok) {
+    await loadProfileList();
+    syncDeleteBtnLabel();
+    showProfileStatus(`角色「${name}」已删除`);
+  } else {
+    showProfileStatus(result.error || '删除失败', true);
+  }
+});
+
+// ========================
 //  加载设置
 // ========================
 async function loadSettings() {
@@ -349,12 +605,19 @@ async function loadSettings() {
   const ui  = config.ui  || {};
   const memory = config.memory || {};
 
+  // 加载角色配置列表
+  await loadProfileList();
+
+  // 加载当前激活角色的提示词到表单
+  const { id: activeId, profile: activeProfile } = await window.electronAPI.profileGetActive();
+
   document.getElementById('cfg-llm-api-base').value = llm.api_base || '';
   document.getElementById('cfg-llm-api-key').value  = llm.api_key  || '';
   document.getElementById('cfg-llm-model').value    = llm.model    || '';
   document.getElementById('cfg-llm-temperature').value = llm.temperature ?? 0.8;
   document.getElementById('cfg-llm-temperature-val').textContent = llm.temperature ?? 0.8;
-  document.getElementById('cfg-llm-system-prompt').value = llm.system_prompt || '';
+  // 提示词从 profile 加载
+  document.getElementById('cfg-llm-system-prompt').value = activeProfile.system_prompt || llm.system_prompt || '';
 
   // TTS 火山
   document.getElementById('cfg-tts-app-id').value       = tts.app_id       || '';
@@ -418,8 +681,9 @@ async function loadSettings() {
   elMin.addEventListener('change', () => { if (parseInt(elMin.value) > parseInt(elMax.value)) elMax.value = elMin.value; });
   elMax.addEventListener('change', () => { if (parseInt(elMax.value) < parseInt(elMin.value)) elMin.value = elMax.value; });
   document.getElementById('cfg-chat-screenshot').checked = !!(proactive.chat_screenshot);
-  document.getElementById('cfg-proactive-decision-prompt').value = proactive.decision_prompt || '';
-  document.getElementById('cfg-proactive-system-prompt').value   = proactive.system_prompt   || '';
+  // 提示词从 profile 加载
+  document.getElementById('cfg-proactive-decision-prompt').value = activeProfile.decision_prompt || proactive.decision_prompt || '';
+  document.getElementById('cfg-proactive-system-prompt').value   = activeProfile.proactive_system_prompt || proactive.system_prompt || '';
   syncProactiveSub();
   proactiveEnabledEl.addEventListener('change', syncProactiveSub);
 
@@ -448,8 +712,8 @@ async function loadSettings() {
   // 记忆
   document.getElementById('cfg-memory-context-rounds').value = memory.context_rounds || 10;
 
-  // 自定义图片
-  updateCustomImagePreview(ui.custom_image || '');
+  // 自定义图片（从 profile 加载）
+  updateCustomImagePreview(activeProfile.custom_image || ui.custom_image || '');
 
   // 记忆信息
   loadMemoryInfo();
@@ -526,6 +790,17 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   };
 
   const result = await window.electronAPI.saveConfig(config);
+
+  // 同时保存提示词到当前激活的 profile
+  const profileData = {
+    name: document.getElementById('cfg-profile-select')?.options[document.getElementById('cfg-profile-select')?.selectedIndex]?.textContent || '默认角色',
+    system_prompt: config.llm.system_prompt,
+    proactive_system_prompt: config.proactive.system_prompt,
+    decision_prompt: config.proactive.decision_prompt,
+    custom_image: config.ui.custom_image,
+  };
+  await window.electronAPI.profileSave(_currentProfileId, profileData);
+
   const saveStatus = document.getElementById('save-status');
   if (result.ok) {
     saveStatus.textContent = '已保存';

@@ -229,6 +229,25 @@
     #custom-confirm-ok:hover { opacity: 0.85; }
     #custom-confirm-cancel { background: #fff; color: var(--theme); }
     #custom-confirm-cancel:hover { background: var(--theme-bg); border-color: var(--theme) !important; }
+
+    /* ─── 新建角色弹窗 ─── */
+    #profile-create-mask {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.25);
+      z-index: 1000; display: none;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+    }
+    #profile-create-mask.visible { display: flex; }
+    #profile-create-box {
+      background: #fff; border: 2px solid var(--theme-light);
+      border-radius: 18px; box-shadow: 0 8px 32px var(--theme-shadow-soft);
+      padding: 20px 22px 16px; width: 340px; max-height: 80vh;
+      overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--theme-light) transparent;
+      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    }
+    #profile-create-box::-webkit-scrollbar { width: 4px; }
+    #profile-create-box::-webkit-scrollbar-thumb { background: var(--theme-light); border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -241,6 +260,19 @@
 
   <!-- 设置内容 -->
   <div id="settings-panel">
+
+    <div class="settings-section">
+      <h3>角色配置</h3>
+      <div class="field">
+        <label>当前角色</label>
+        <select id="cfg-profile-select" style="width:100%;"></select>
+      </div>
+      <div class="field-row" style="gap:8px;margin-top:6px;">
+        <button id="profile-new-btn" style="flex:1;padding:5px;border:2px solid var(--theme-light);border-radius:8px;background:#ffffff;color:var(--theme);font-size:calc(var(--fs) - 1px);cursor:pointer;">新建角色</button>
+        <button id="profile-delete-btn" style="flex:1;padding:5px;border:2px solid #ffb3b3;border-radius:8px;background:#ffffff;color:#e05555;font-size:calc(var(--fs) - 1px);cursor:pointer;">删除角色</button>
+      </div>
+      <div class="save-status" id="profile-status"></div>
+    </div>
 
     <div class="settings-section">
       <h3>LLM 大模型</h3>
@@ -533,10 +565,53 @@
   <div id="custom-confirm-mask">
     <div id="custom-confirm-box">
       <div id="custom-confirm-msg"></div>
+      <input type="text" id="custom-confirm-input" placeholder="" style="display:none;width:100%;padding:0.4em 0.6em;border:2px solid var(--theme-light);border-radius:6px;font-size:var(--fs);outline:none;margin-top:4px;">
       <div id="custom-confirm-btns">
         <button id="custom-confirm-cancel">取消</button>
         <button id="custom-confirm-ok">确定</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 新建角色弹窗 -->
+  <div id="profile-create-mask">
+    <div id="profile-create-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span style="font-size:15px;font-weight:bold;color:var(--theme);">新建角色</span>
+        <button id="profile-create-close" style="width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,0.06);color:#999;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+      </div>
+      <div class="field">
+        <label>角色名称</label>
+        <input type="text" id="profile-create-name" placeholder="例如：小猫咪">
+      </div>
+      <div class="field">
+        <label>系统提示词</label>
+        <textarea id="profile-create-system-prompt" rows="4" placeholder="角色的系统提示词..."></textarea>
+      </div>
+      <div class="field">
+        <label>决策提示词</label>
+        <textarea id="profile-create-decision-prompt" rows="3" placeholder="主动交互的决策提示词（可选）"></textarea>
+      </div>
+      <div class="field">
+        <label>主动交互提示词</label>
+        <textarea id="profile-create-proactive-prompt" rows="3" placeholder="主动交互系统提示词（可选）"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <button id="profile-create-import-btn" style="padding:4px 14px;border:2px solid var(--theme-light);border-radius:6px;background:#fff;color:var(--theme);font-size:calc(var(--fs) - 1px);cursor:pointer;">导入提示词</button>
+      </div>
+      <div class="field">
+        <label>角色图片（可选）</label>
+        <div id="profile-create-image-preview-wrap" style="display:none;margin-bottom:8px;text-align:center;">
+          <img id="profile-create-image-preview" src="" alt="预览"
+            style="max-width:100%;max-height:100px;border-radius:8px;border:2px solid var(--theme-light);object-fit:contain;">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="profile-create-image-btn" style="flex:1;padding:5px;border:2px solid var(--theme-light);border-radius:8px;background:#fff;color:var(--theme);font-size:calc(var(--fs) - 1px);cursor:pointer;">上传图片</button>
+          <button id="profile-create-image-clear-btn" style="flex:1;padding:5px;border:2px solid #ffb3b3;border-radius:8px;background:#fff;color:#e05555;font-size:calc(var(--fs) - 1px);cursor:pointer;display:none;">移除图片</button>
+        </div>
+      </div>
+      <div class="save-status" id="profile-create-status" style="margin-bottom:6px;"></div>
+      <button id="profile-create-save-btn" style="width:100%;padding:8px;border:none;border-radius:8px;background:var(--theme-gradient);color:#fff;font-size:var(--fs);cursor:pointer;">保存角色</button>
     </div>
   </div>
 

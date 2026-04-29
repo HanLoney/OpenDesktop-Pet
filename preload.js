@@ -43,6 +43,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),
 
+  // 角色配置（Profile）
+  profileList: () => ipcRenderer.invoke('profile-list'),
+  profileGet: (id) => ipcRenderer.invoke('profile-get', id),
+  profileGetActive: () => ipcRenderer.invoke('profile-get-active'),
+  profileSave: (id, data) => ipcRenderer.invoke('profile-save', id, data),
+  profileCreate: (data) => ipcRenderer.invoke('profile-create', data),
+  profileDelete: (id) => ipcRenderer.invoke('profile-delete', id),
+  profileSwitch: (id) => ipcRenderer.invoke('profile-switch', id),
+  onProfileSwitched: (cb) => ipcRenderer.on('profile-switched', (_e, data) => cb(data)),
+
   // 截屏
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
 
