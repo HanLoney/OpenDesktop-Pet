@@ -251,6 +251,80 @@ function appendBubbleText(text) {
 let isChatting = false;
 let bubbleHideTimer = null;
 
+// ── 逐句打字机 ──
+let sentenceQueue = [];   // 已切好的完整句子
+let sentenceBuf = '';      // 正在拼接的不完整句子
+let typewriterTimer = null;     // 打字机定时器
+let sentenceTimer = null;  // 句间停留定时器
+let chatDone = false;      // 流是否已结束
+let waitingForSentence = false; // 队列空，等待新句子
+
+function resetSentenceQueue() {
+  sentenceQueue = [];
+  sentenceBuf = '';
+  chatDone = false;
+  waitingForSentence = false;
+  if (typewriterTimer) { clearTimeout(typewriterTimer); typewriterTimer = null; }
+  if (sentenceTimer) { clearTimeout(sentenceTimer); sentenceTimer = null; }
+}
+
+// 句子分隔符：中文句号、感叹号、问号，英文 . ! ?，换行
+const SENTENCE_SEP = /([。！？!?\n])/;
+
+function enqueueSentences() {
+  const parts = sentenceBuf.split(SENTENCE_SEP);
+  // parts: [text, sep, text, sep, ..., remainder]
+  // 每两个元素拼成一个完整句子
+  while (parts.length >= 2) {
+    const text = parts.shift();
+    const sep = parts.shift();
+    const sentence = (text + sep).trim();
+    if (sentence) sentenceQueue.push(sentence);
+  }
+  // 剩余不完整部分留在 buf
+  sentenceBuf = parts.join('');
+}
+
+// 打字机效果显示一句话
+function showNextSentence() {
+  if (sentenceQueue.length === 0) {
+    if (chatDone) {
+      // 全部显示完毕，启动隐藏计时器
+      bubbleHideTimer = setTimeout(() => {
+        chatBubble.classList.remove('visible');
+      }, 10000);
+      return;
+    }
+    // 队列空但流未结束，等待
+    waitingForSentence = true;
+    return;
+  }
+
+  waitingForSentence = false;
+  const sentence = sentenceQueue.shift();
+  let charIdx = 0;
+  setBubbleText('');
+
+  // 逐字打出
+  const TYPE_INTERVAL = 50; // 每字 50ms
+  function typeChar() {
+    if (charIdx < sentence.length) {
+      bubbleContent.textContent += sentence[charIdx];
+      charIdx++;
+      typewriterTimer = setTimeout(typeChar, TYPE_INTERVAL);
+    } else {
+      typewriterTimer = null;
+      // 停留一段时间后切下一句
+      const stay = Math.max(1500, Math.min(5000, sentence.length * 100));
+      sentenceTimer = setTimeout(() => {
+        sentenceTimer = null;
+        showNextSentence();
+      }, stay);
+    }
+  }
+  typeChar();
+}
+
 async function sendMessage() {
   const msg = chatInput.value.trim();
   if (!msg || isChatting || !aiActive) return;
@@ -259,6 +333,7 @@ async function sendMessage() {
   sendBtn.disabled = true;
   chatInput.value = '';
   aiReplyStarted = false;
+  resetSentenceQueue();
 
   bubbleContent.textContent = '';
   setBubbleText('你：' + msg);
@@ -295,6 +370,7 @@ screenshotBtn.addEventListener('click', async () => {
   sendBtn.disabled = true;
   screenshotBtn.disabled = true;
   aiReplyStarted = false;
+  resetSentenceQueue();
 
   bubbleContent.textContent = '';
   setBubbleText('正在截屏...');
@@ -336,28 +412,39 @@ window.electronAPI.onChatToken((token) => {
   if (!aiReplyStarted) {
     aiReplyStarted = true;
     bubbleContent.textContent = '';
-    // TTS 关闭时，若气泡尚未显示则自动打开
     if (!ttsEnabled && !chatBubble.classList.contains('visible')) {
       showChatBubble();
     }
   }
-  appendBubbleText(token);
+  // 逐句打字机：token 进入缓冲，切分句子
+  sentenceBuf += token;
+  const prevLen = sentenceQueue.length;
+  enqueueSentences();
+  // 首句入队或等待中有新句子，启动显示
+  if (sentenceQueue.length > 0 && (waitingForSentence || (!typewriterTimer && !sentenceTimer))) {
+    showNextSentence();
+  }
 });
 
 window.electronAPI.onChatDone((fullText) => {
   isChatting = false;
   sendBtn.disabled = false;
   screenshotBtn.disabled = false;
-  // 10 秒后自动隐藏气泡
-  bubbleHideTimer = setTimeout(() => {
-    chatBubble.classList.remove('visible');
-  }, 10000);
+  // 将缓冲区剩余文字作为最后一句入队
+  const last = sentenceBuf.trim();
+  sentenceBuf = '';
+  if (last) sentenceQueue.push(last);
+  chatDone = true;
+  if (waitingForSentence) {
+    showNextSentence();
+  }
 });
 
 window.electronAPI.onChatError((err) => {
   isChatting = false;
   sendBtn.disabled = false;
   screenshotBtn.disabled = false;
+  resetSentenceQueue();
   setBubbleText('出错了: ' + err);
   showChatBubble();
   bubbleHideTimer = setTimeout(() => {
@@ -374,6 +461,7 @@ window.electronAPI.onProactiveChatStart(() => {
   sendBtn.disabled = true;
   screenshotBtn.disabled = true;
   aiReplyStarted = false;
+  resetSentenceQueue();
 
   bubbleContent.textContent = '';
   showChatBubble();
