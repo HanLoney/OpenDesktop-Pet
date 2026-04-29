@@ -368,17 +368,14 @@ ipcMain.handle('resize-to-content', (_event, contentWidth, contentHeight) => {
     let targetW, targetH;
 
     if (contentWidth > 0 && contentHeight > 0) {
-      // 等比缩放：先按最大宽度算，再按最大高度校正
-      const ratio = contentWidth / contentHeight;
-      targetW = Math.round(Math.min(MAX_W, contentWidth));
-      targetH = Math.round(targetW / ratio);
-      if (targetH > MAX_H) {
-        targetH = MAX_H;
-        targetW = Math.round(targetH * ratio);
-      }
-      // 最小保障
-      if (targetW < MIN_W) { targetW = MIN_W; targetH = Math.round(targetW / ratio); }
-      if (targetH < MIN_H) { targetH = MIN_H; targetW = Math.round(targetH * ratio); }
+      // 等比缩放到最大边界内；窗口最小尺寸只补足留白，不再反向撑大另一边
+      const fitScale = Math.min(MAX_W / contentWidth, MAX_H / contentHeight, 1);
+      targetW = Math.round(contentWidth * fitScale);
+      targetH = Math.round(contentHeight * fitScale);
+
+      // 保证输入区可用，同时严格不超过最大窗口限制，避免超宽图拉长窗口
+      targetW = Math.max(MIN_W, Math.min(MAX_W, targetW));
+      targetH = Math.max(MIN_H, Math.min(MAX_H, targetH));
     } else {
       // 无尺寸信息（Live2D 恢复），回到默认
       targetW = DEFAULT_WIDTH;
