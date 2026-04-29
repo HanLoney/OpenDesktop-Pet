@@ -1,6 +1,6 @@
 {
   "name": "open-desktop-pet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenDesktopPet - AI Desktop Pet",
   "license": "Apache-2.0",
   "main": "main.js",
