@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openSettingsWindow: () => ipcRenderer.send('open-settings-window'),
   // 设置页通知主窗口：配置已保存
   notifyConfigSaved: (config) => ipcRenderer.send('notify-config-saved', config),
+  // 设置页通知主窗口：气泡位置预览
+  notifyBubblePreview: (pos) => ipcRenderer.send('notify-bubble-preview', pos),
+  onBubblePreview: (cb) => ipcRenderer.on('bubble-preview', (_e, pos) => cb(pos)),
   // 设置页通知主窗口：切换图片 / 恢复 Live2D
   notifySetCustomImage: (url) => ipcRenderer.send('notify-set-custom-image', url),
   notifyClearCustomImage: () => ipcRenderer.send('notify-clear-custom-image'),

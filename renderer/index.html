@@ -135,57 +135,6 @@
       #chat-bubble::after { background: #1e1e28; border-left-color: var(--theme); border-bottom-color: var(--theme); }
     }
 
-    /* 气泡编辑按钮 */
-    #bubble-edit-btn {
-      position: absolute;
-      top: -10px;
-      right: -10px;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: var(--theme);
-      border: none;
-      cursor: pointer;
-      display: none;
-      z-index: 12;
-      opacity: 0.7;
-    }
-    #chat-bubble.visible #bubble-edit-btn { display: block; }
-    #chat-bubble.edit-mode #bubble-edit-btn { display: none; }
-
-    /* 气泡编辑模式 */
-    #chat-bubble.edit-mode {
-      display: block !important;
-      pointer-events: all;
-      cursor: move;
-      outline: 2px dashed var(--theme);
-      outline-offset: 2px;
-      overflow: visible;
-      user-select: none;
-    }
-    #chat-bubble.edit-mode::before {
-      content: '拖动移动 · 右下角缩放';
-      position: absolute;
-      top: -22px;
-      left: 0;
-      font-size: calc(var(--fs) - 2px);
-      color: var(--theme);
-      white-space: nowrap;
-      pointer-events: none;
-    }
-    #bubble-resize-handle {
-      display: none;
-      position: absolute;
-      bottom: -6px;
-      right: -6px;
-      width: 14px;
-      height: 14px;
-      background: var(--theme);
-      border-radius: 3px;
-      cursor: se-resize;
-      z-index: 11;
-    }
-    #chat-bubble.edit-mode #bubble-resize-handle { display: block; }
 
     /* ─── 窗口拖动手柄 ─────────────────────────────────────── */
     #window-drag-handle {
@@ -378,8 +327,6 @@
     <!-- 聊天气泡 -->
     <div id="chat-bubble">
       <div class="bubble-content" id="bubble-content"></div>
-      <div id="bubble-resize-handle"></div>
-      <button id="bubble-edit-btn" title="调整气泡位置"></button>
     </div>
 
     <!-- 窗口控制：拖拽手柄、缩放按钮 -->

@@ -28,7 +28,7 @@ const settingsBtn = document.getElementById('settings-btn');
 const screenshotBtn = document.getElementById('screenshot-btn');
 const chatBubble = document.getElementById('chat-bubble');
 const bubbleContent = document.getElementById('bubble-content');
-const bubbleResizeHandle = document.getElementById('bubble-resize-handle');
+
 
 // 气泡显示开关
 let showBubble = true;
@@ -215,12 +215,6 @@ async function loadBubblePos() {
   applyBubblePos();
 }
 
-async function saveBubblePos() {
-  const config = await window.electronAPI.getConfig();
-  config.bubble = { ...bubblePos };
-  await window.electronAPI.saveConfig(config);
-}
-
 loadBubblePos();
 
 // 初始化时同步 ttsEnabled、showBubble、custom_image
@@ -240,97 +234,6 @@ window.electronAPI.getConfig().then(cfg => {
       if (typeof window.setCustomImage === 'function') window.setCustomImage(customImg);
     });
   }
-});
-
-// ========================
-//  气泡编辑模式（拖动 + 缩放）
-// ========================
-let bubbleEditMode = false;
-
-function enterBubbleEditMode() {
-  bubbleEditMode = true;
-  window._bubbleEditMode = true;
-  chatBubble.classList.add('edit-mode', 'visible');
-  bubbleContent.textContent = '气泡示例文字，拖动我来移动位置';
-
-  // 标记刚进入，忽略触发 enter 的那次 click 冒泡到 document
-  _bubbleEditJustEntered = true;
-  setTimeout(() => { _bubbleEditJustEntered = false; }, 50);
-
-  // 强制窗口不穿透，并持续保持（编辑模式期间不走穿透逻辑）
-  window.electronAPI.setIgnoreMouse(false);
-  // 开启定时保活：每 200ms 刷新一次不穿透状态，防止 mousemove 穿透检测覆盖
-  _bubbleEditKeepAlive = setInterval(() => {
-    if (bubbleEditMode) window.electronAPI.setIgnoreMouse(false);
-  }, 200);
-}
-
-function exitBubbleEditMode() {
-  bubbleEditMode = false;
-  window._bubbleEditMode = false;
-  chatBubble.classList.remove('edit-mode', 'visible');
-  bubbleContent.textContent = '';
-  if (_bubbleEditKeepAlive) {
-    clearInterval(_bubbleEditKeepAlive);
-    _bubbleEditKeepAlive = null;
-  }
-  saveBubblePos();
-}
-
-let _bubbleEditKeepAlive = null;
-let _bubbleEditJustEntered = false; // 刚进入编辑模式时，忽略同次 click 冒泡
-
-// 拖动移动
-let dragState = null;
-
-chatBubble.addEventListener('mousedown', (e) => {
-  if (!bubbleEditMode) return;
-  if (e.target === bubbleResizeHandle) return;
-  e.preventDefault();
-  const container = document.getElementById('ui-layer');
-  const cw = container.offsetWidth;
-  const ch = container.offsetHeight;
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const startLeft = bubblePos.left;
-  const startTop = bubblePos.top;
-
-  dragState = { startX, startY, startLeft, startTop, cw, ch };
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (!dragState) return;
-  const dx = e.clientX - dragState.startX;
-  const dy = e.clientY - dragState.startY;
-  bubblePos.left = Math.max(0, Math.min(95, dragState.startLeft + dx / dragState.cw * 100));
-  bubblePos.top = Math.max(0, Math.min(90, dragState.startTop + dy / dragState.ch * 100));
-  applyBubblePos();
-});
-
-document.addEventListener('mouseup', () => {
-  dragState = null;
-});
-
-// 右下角缩放
-let resizeState = null;
-
-bubbleResizeHandle.addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  const container = document.getElementById('ui-layer');
-  const cw = container.offsetWidth;
-  resizeState = { startX: e.clientX, startWidth: bubblePos.width, cw };
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (!resizeState) return;
-  const dx = e.clientX - resizeState.startX;
-  bubblePos.width = Math.max(10, Math.min(95, resizeState.startWidth + dx / resizeState.cw * 100));
-  applyBubblePos();
-});
-
-document.addEventListener('mouseup', () => {
-  resizeState = null;
 });
 
 // 操作气泡文字
@@ -721,6 +624,21 @@ window.electronAPI.getConfig().then(cfg => {
   if (cfg.camera?.enabled) syncCameraStream(true, cfg.camera?.device_id);
 });
 
+// 设置窗口拖滑块时实时预览气泡位置
+let _bubblePreviewTimer = null;
+window.electronAPI.onBubblePreview((pos) => {
+  if (pos.left  !== undefined) bubblePos.left  = pos.left;
+  if (pos.top   !== undefined) bubblePos.top   = pos.top;
+  if (pos.width !== undefined) bubblePos.width = pos.width;
+  applyBubblePos();
+  setBubbleText('气泡预览 ~ 拖动滑块调整位置');
+  showChatBubble();
+  if (_bubblePreviewTimer) clearTimeout(_bubblePreviewTimer);
+  _bubblePreviewTimer = setTimeout(() => {
+    chatBubble.classList.remove('visible');
+  }, 2000);
+});
+
 // 设置窗口通知切换图片/恢复 Live2D
 window.electronAPI.onSetCustomImage((url) => {
   if (typeof window.setCustomImage === 'function') window.setCustomImage(url);
@@ -742,24 +660,6 @@ window.electronAPI.onProfileSwitched((profile) => {
   chatBubble.classList.remove('visible');
 });
 
-document.getElementById('bubble-edit-btn')?.addEventListener('click', (e) => {
-  e.stopPropagation();  // 阻止冒泡到 document click，防止立刻触发 exitBubbleEditMode
-  enterBubbleEditMode();
-});
-
-// 点击气泡外部退出编辑模式（ESC 也可以）
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && bubbleEditMode) exitBubbleEditMode();
-});
-
-// 点击 ui-layer / live2d-layer 空白区退出编辑模式（ESC 也可以）
-document.addEventListener('click', (e) => {
-  if (!bubbleEditMode) return;
-  if (_bubbleEditJustEntered) return; // 忽略触发进入编辑的那次 click
-  if (e.target !== chatBubble && !chatBubble.contains(e.target)) {
-    exitBubbleEditMode();
-  }
-});
 
 function applyFontSize(size) {
   document.documentElement.style.setProperty('--fs', size + 'px');

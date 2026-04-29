@@ -201,9 +201,6 @@ function setupInteractions() {
 
   // --- 点击穿透检测（挂在 document 上，图片模式下 canvas 不可见时仍能响应） ---
   function _hitTestInteractable(clientX, clientY) {
-    // 气泡编辑模式：全部放行
-    if (window._bubbleEditMode) return true;
-
     // 底部聊天区 / 设置面板 —— 只要悬浮标志为 true 就直接放行
     if (window._chatAreaHover) return true;
 
@@ -255,7 +252,7 @@ function setupInteractions() {
 
   // --- 点击穿透检测（document 级，兼容图片模式） ---
   document.addEventListener('mousemove', (e) => {
-    if (window._bubbleEditMode || window._windowDragActive) return;
+    if (window._windowDragActive) return;
     if (_imgMode && _imgDragging) return; // 图片拖拽中跳过
     const isOver = _hitTestInteractable(e.clientX, e.clientY);
     window.electronAPI.setIgnoreMouse(!isOver);
@@ -266,7 +263,7 @@ function setupInteractions() {
   });
 
   canvas.addEventListener('mouseleave', () => {
-    if (!STATE.isDragging && !isPointerDown && !window._bubbleEditMode && !window._windowDragActive) {
+    if (!STATE.isDragging && !isPointerDown && !window._windowDragActive) {
       // 延迟一帧，让 handle/chatArea 的 mouseenter 有机会先设置标志
       requestAnimationFrame(() => {
         if (!window._windowDragHandleHover && !window._windowDragActive && !window._chatAreaHover) {

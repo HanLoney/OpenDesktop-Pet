@@ -1051,6 +1051,13 @@ ipcMain.on('notify-config-saved', (_event, config) => {
   }
 });
 
+// 设置窗口通知主窗口：气泡位置预览
+ipcMain.on('notify-bubble-preview', (_event, pos) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('bubble-preview', pos);
+  }
+});
+
 // 设置窗口通知主窗口切换图片
 ipcMain.on('notify-set-custom-image', (_event, url) => {
   if (mainWindow && !mainWindow.isDestroyed()) {

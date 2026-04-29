@@ -698,6 +698,17 @@ async function loadSettings() {
 
   document.getElementById('cfg-ui-show-bubble').checked = ui.show_bubble !== false;
 
+  const bubble = config.bubble || {};
+  const bubbleLeft  = bubble.left  ?? 62;
+  const bubbleTop   = bubble.top   ?? 8;
+  const bubbleWidth = bubble.width ?? 36;
+  document.getElementById('cfg-ui-bubble-left').value  = bubbleLeft;
+  document.getElementById('cfg-ui-bubble-left-val').textContent  = bubbleLeft;
+  document.getElementById('cfg-ui-bubble-top').value   = bubbleTop;
+  document.getElementById('cfg-ui-bubble-top-val').textContent   = bubbleTop;
+  document.getElementById('cfg-ui-bubble-width').value = bubbleWidth;
+  document.getElementById('cfg-ui-bubble-width-val').textContent = bubbleWidth;
+
   const themeColor  = ui.theme_color      || '#5B8CFF';
   const themeMode   = ui.theme_color_mode || 'solid';
   const themeColor2 = themeMode === 'gradient' ? (ui.theme_color2 || themeColor) : themeColor;
@@ -781,6 +792,11 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
       theme_color_mode: document.getElementById('cfg-ui-theme-color-mode')?.value || 'solid',
       custom_image:     _customImageUrl || '',
     },
+    bubble: {
+      left:  parseInt(document.getElementById('cfg-ui-bubble-left').value)  || 62,
+      top:   parseInt(document.getElementById('cfg-ui-bubble-top').value)   || 8,
+      width: parseInt(document.getElementById('cfg-ui-bubble-width').value) || 36,
+    },
     camera: {
       enabled:      document.getElementById('cfg-camera-enabled')?.checked || false,
       device_id:    document.getElementById('cfg-camera-device')?.value    || '',
@@ -830,6 +846,26 @@ document.getElementById('cfg-ui-font-size').addEventListener('input', (e) => {
 document.getElementById('cfg-ui-bar-size').addEventListener('input', (e) => {
   document.getElementById('cfg-ui-bar-size-val').textContent = e.target.value;
 });
+document.getElementById('cfg-ui-bubble-left').addEventListener('input', (e) => {
+  document.getElementById('cfg-ui-bubble-left-val').textContent = e.target.value;
+  sendBubblePreview();
+});
+document.getElementById('cfg-ui-bubble-top').addEventListener('input', (e) => {
+  document.getElementById('cfg-ui-bubble-top-val').textContent = e.target.value;
+  sendBubblePreview();
+});
+document.getElementById('cfg-ui-bubble-width').addEventListener('input', (e) => {
+  document.getElementById('cfg-ui-bubble-width-val').textContent = e.target.value;
+  sendBubblePreview();
+});
+
+function sendBubblePreview() {
+  window.electronAPI.notifyBubblePreview({
+    left:  parseInt(document.getElementById('cfg-ui-bubble-left').value)  || 62,
+    top:   parseInt(document.getElementById('cfg-ui-bubble-top').value)   || 8,
+    width: parseInt(document.getElementById('cfg-ui-bubble-width').value) || 36,
+  });
+}
 
 // ========================
 //  记忆管理
