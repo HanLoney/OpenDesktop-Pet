@@ -242,7 +242,7 @@ function setBubbleText(text) {
 }
 function appendBubbleText(text) {
   bubbleContent.textContent += text;
-  chatBubble.scrollTop = chatBubble.scrollHeight;
+  bubbleContent.scrollTop = bubbleContent.scrollHeight;
 }
 
 // ========================
