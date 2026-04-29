@@ -16,6 +16,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/electron-33-47848f.svg" alt="Electron">
+  <a href="https://opendesktoppet.com/"><img src="https://img.shields.io/badge/官网-opendesktoppet.com-ff69b4.svg" alt="Website"></a>
 </p>
 
 ---
