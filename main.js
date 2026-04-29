@@ -160,18 +160,43 @@ function switchProfile(id) {
   }
   // 保存当前记忆
   memoryService.save();
-  // 更新配置中的 activeProfile
+
+  // ★ 保存当前角色的窗口尺寸到旧 profile
   const config = loadConfig();
+  const oldId = config.activeProfile || 'default';
+  const oldProfile = loadProfile(oldId);
+  if (config.window) {
+    oldProfile.window_baseWidth  = config.window.baseWidth  || DEFAULT_WIDTH;
+    oldProfile.window_baseHeight = config.window.baseHeight || DEFAULT_HEIGHT;
+    oldProfile.window_scale      = config.window.scale      ?? 1.0;
+  }
+  saveProfile(oldId, oldProfile);
+
+  // 更新配置中的 activeProfile
   config.activeProfile = id;
-  saveConfigFile(config);
+
   // 切换记忆目录
   memoryService.setDataDir(dir);
   memoryService.reload();
   // 加载新 profile 数据
   const profile = loadProfile(id);
-  // 通知渲染进程
+
+  // ★ 恢复新角色的窗口尺寸（如果有保存过）
+  const hasWindowSize = !!(profile.window_baseWidth && profile.window_baseHeight);
+  if (hasWindowSize) {
+    if (!config.window) config.window = {};
+    config.window.baseWidth  = profile.window_baseWidth;
+    config.window.baseHeight = profile.window_baseHeight;
+    config.window.scale      = profile.window_scale || 1.0;
+    saveConfigFile(config);
+    applyWindowSize(config.window);
+  } else {
+    saveConfigFile(config);
+  }
+
+  // 通知渲染进程（附带是否已恢复窗口尺寸的标记）
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('profile-switched', profile);
+    mainWindow.webContents.send('profile-switched', { ...profile, _hasWindowSize: hasWindowSize });
   }
   return { ok: true, profile };
 }
@@ -249,6 +274,33 @@ function clampScale(s) {
   const n = Number(s);
   if (!isFinite(n)) return 1.0;
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, n));
+}
+
+/** 一次性应用窗口尺寸（baseWidth × scale），保持右下角位置不变 */
+function applyWindowSize(windowCfg) {
+  if (!mainWindow) return;
+  const baseW = windowCfg.baseWidth || DEFAULT_WIDTH;
+  const baseH = windowCfg.baseHeight || DEFAULT_HEIGHT;
+  const s = clampScale(windowCfg.scale ?? 1.0);
+  const targetW = Math.round(baseW * s);
+  const targetH = Math.round(baseH * s);
+
+  const [oldX, oldY] = mainWindow.getPosition();
+  const [oldW, oldH] = mainWindow.getContentSize();
+  const newX = Math.max(0, oldX + (oldW - targetW));
+  const newY = Math.max(0, oldY + (oldH - targetH));
+
+  mainWindow.setResizable(true);
+  const frameDiff = mainWindow.getSize();
+  const contentDiff = mainWindow.getContentSize();
+  const frameExtraW = frameDiff[0] - contentDiff[0];
+  const frameExtraH = frameDiff[1] - contentDiff[1];
+  mainWindow.setBounds({
+    x: newX, y: newY,
+    width: targetW + frameExtraW,
+    height: targetH + frameExtraH,
+  });
+  mainWindow.setResizable(false);
 }
 
 // ========================
@@ -362,8 +414,8 @@ ipcMain.handle('resize-to-content', (_event, contentWidth, contentHeight) => {
 
     // 最小 / 最大限制
     const MIN_W = 280, MIN_H = 360;
-    const MAX_W = Math.min(700, Math.round(screenW * 0.55));
-    const MAX_H = Math.min(900, Math.round(screenH * 0.80));
+    const MAX_W = Math.min(300, Math.round(screenW * 0.55));
+    const MAX_H = Math.min(500, Math.round(screenH * 0.80));
 
     let targetW, targetH;
 
@@ -391,16 +443,25 @@ ipcMain.handle('resize-to-content', (_event, contentWidth, contentHeight) => {
     saveConfigFile(config);
 
     // 调整窗口大小，保持右下角位置不变
+    // 使用 setBounds 一次性设置位置和尺寸，避免分步操作导致窗口闪跳
     const [oldX, oldY] = mainWindow.getPosition();
     const [oldW, oldH] = mainWindow.getContentSize();
-    const newX = oldX + (oldW - targetW);
-    const newY = oldY + (oldH - targetH);
+    const newX = Math.max(0, oldX + (oldW - targetW));
+    const newY = Math.max(0, oldY + (oldH - targetH));
     mainWindow.setResizable(true);
-    mainWindow.setContentSize(targetW, targetH);
+    const frameDiff = mainWindow.getSize();
+    const contentDiff = mainWindow.getContentSize();
+    const frameExtraW = frameDiff[0] - contentDiff[0];
+    const frameExtraH = frameDiff[1] - contentDiff[1];
+    mainWindow.setBounds({
+      x: newX,
+      y: newY,
+      width: targetW + frameExtraW,
+      height: targetH + frameExtraH,
+    });
     mainWindow.setResizable(false);
-    mainWindow.setPosition(Math.max(0, newX), Math.max(0, newY));
 
-    return { ok: true, width: targetW, height: targetH };
+    return { ok: true, width: targetW, height: targetH, scale: 1.0 };
   } catch (err) {
     return { ok: false, error: err.message };
   }

@@ -71,8 +71,9 @@ let _handleDragging = false;
 // 供 pet-controller 在点击模型时调用
 window.showWindowDragHandle = function() {
   windowDragHandle.classList.add('visible');
-  windowZoomIn.classList.add('visible');
-  windowZoomOut.classList.add('visible');
+  // 到达缩放极限时不显示对应按钮
+  if (windowScale < WIN_SCALE_MAX - 1e-6) windowZoomIn.classList.add('visible');
+  if (windowScale > WIN_SCALE_MIN + 1e-6) windowZoomOut.classList.add('visible');
   if (_handleHideTimer) clearTimeout(_handleHideTimer);
   _handleHideTimer = setTimeout(() => {
     if (!_handleDragging) {
@@ -178,6 +179,14 @@ async function loadWindowScale() {
   } catch (_e) {}
   updateZoomButtonsState();
 }
+
+/** 供外部（pet-controller）在 resizeToContent 返回后同步 windowScale */
+window.syncWindowScale = function(scale) {
+  const s = Number(scale);
+  if (!isFinite(s)) return;
+  windowScale = Math.max(WIN_SCALE_MIN, Math.min(WIN_SCALE_MAX, s));
+  updateZoomButtonsState();
+};
 
 windowZoomIn.addEventListener('click', (e) => {
   e.preventDefault();
@@ -737,11 +746,20 @@ window.electronAPI.onClearCustomImage(() => {
 
 // 角色切换通知：更新图片、清空气泡
 window.electronAPI.onProfileSwitched((profile) => {
-  // 切换角色图片
+  // 同步窗口缩放值（main 进程切换 profile 时可能已恢复了该角色的 scale）
+  if (profile._hasWindowSize) {
+    window.electronAPI.getConfig().then(cfg => {
+      const s = Number(cfg.window?.scale);
+      if (isFinite(s)) windowScale = Math.max(WIN_SCALE_MIN, Math.min(WIN_SCALE_MAX, s));
+      updateZoomButtonsState();
+    });
+  }
+  // 切换角色图片（有已保存窗口尺寸时跳过 resize，避免覆盖恢复的尺寸）
+  const noResize = !!profile._hasWindowSize;
   if (profile.custom_image) {
-    if (typeof window.setCustomImage === 'function') window.setCustomImage(profile.custom_image);
+    if (typeof window.setCustomImage === 'function') window.setCustomImage(profile.custom_image, { noResize });
   } else {
-    if (typeof window.clearCustomImage === 'function') window.clearCustomImage();
+    if (typeof window.clearCustomImage === 'function') window.clearCustomImage({ noResize });
   }
   // 清空聊天气泡
   bubbleContent.textContent = '';

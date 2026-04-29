@@ -829,6 +829,8 @@ const IMG_SCALE_MAX  = 4.0;
  * @param {boolean} [opts.noResize]  传 true 时不触发窗口自适应（如设置面板刷新时）
  */
 window.setCustomImage = function(url, opts) {
+  // 如果已经在显示相同的图片，跳过重复的 resize
+  const sameImage = _imgMode && _imgUrl === url;
   _imgUrl = url;
   _imgMode = true;
   _imgOffsetX = 0;
@@ -848,12 +850,18 @@ window.setCustomImage = function(url, opts) {
     STATE.app.view.style.pointerEvents = 'none';
   }
 
-  // 读取图片真实尺寸，自适应窗口大小（noResize 时跳过）
-  if (!opts?.noResize) {
+  // 读取图片真实尺寸，自适应窗口大小（noResize 或相同图片时跳过）
+  if (!opts?.noResize && !sameImage) {
     const probe = new Image();
     probe.onload = function() {
       if (window.electronAPI?.resizeToContent) {
-        window.electronAPI.resizeToContent(probe.naturalWidth, probe.naturalHeight);
+        window.electronAPI.resizeToContent(probe.naturalWidth, probe.naturalHeight)
+          .then(res => {
+            // 同步渲染进程的 windowScale 变量
+            if (res?.scale != null && typeof window.syncWindowScale === 'function') {
+              window.syncWindowScale(res.scale);
+            }
+          });
       }
     };
     probe.src = url;
@@ -866,6 +874,8 @@ window.setCustomImage = function(url, opts) {
  * @param {boolean} [opts.noResize]  传 true 时不触发窗口自适应
  */
 window.clearCustomImage = function(opts) {
+  // 如果已经是 Live2D 模式，跳过重复的 resize
+  const alreadyClear = !_imgMode;
   _imgMode = false;
   _imgUrl = '';
 
@@ -880,9 +890,13 @@ window.clearCustomImage = function(opts) {
     STATE.app.view.style.pointerEvents = '';
   }
 
-  // 恢复 Live2D 默认窗口尺寸（传 0,0 触发默认逻辑），noResize 时跳过
-  if (!opts?.noResize && window.electronAPI?.resizeToContent) {
-    window.electronAPI.resizeToContent(0, 0);
+  // 恢复 Live2D 默认窗口尺寸（传 0,0 触发默认逻辑），noResize 或已是 Live2D 模式时跳过
+  if (!opts?.noResize && !alreadyClear && window.electronAPI?.resizeToContent) {
+    window.electronAPI.resizeToContent(0, 0).then(res => {
+      if (res?.scale != null && typeof window.syncWindowScale === 'function') {
+        window.syncWindowScale(res.scale);
+      }
+    });
   }
 };
 
